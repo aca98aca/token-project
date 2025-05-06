@@ -1,0 +1,75 @@
+# Tokenomics Simulation Framework
+
+A modular and extensible framework for simulating token economics and network dynamics.
+
+## Features
+
+- Modular consensus mechanism implementation (currently PoW)
+- Dynamic price discovery with market impact
+- Multiple agent types with different strategies
+- Extensible architecture for adding new components
+- Comprehensive metrics tracking and analysis
+
+## Project Structure
+
+```
+token_sim/
+├── consensus/         # Consensus mechanism implementations
+├── agents/           # Agent implementations
+├── market/           # Market dynamics and price discovery
+└── simulation.py     # Main simulation runner
+```
+
+## Setup
+
+1. Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+## Running the Simulation
+
+To run a basic simulation:
+
+```bash
+python token_sim/run_simulation.py
+```
+
+## Components
+
+### Consensus Mechanisms
+- Proof of Work (PoW) implementation
+- Extensible interface for adding new mechanisms
+
+### Agents
+- Miner agents with different strategies:
+  - Passive
+  - Aggressive
+  - Opportunistic
+
+### Market
+- Price discovery with market impact
+- Volume tracking
+- Price statistics
+
+## Extending the Framework
+
+### Adding a New Consensus Mechanism
+1. Create a new class implementing the `ConsensusMechanism` interface
+2. Implement required methods
+3. Add to the consensus module
+
+### Adding New Agent Types
+1. Create a new class implementing the `Agent` interface
+2. Implement required methods
+3. Add to the agents module
+
+## License
+
+MIT License 

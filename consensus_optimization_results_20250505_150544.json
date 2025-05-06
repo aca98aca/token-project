@@ -1,0 +1,57 @@
+{
+  "pow": {
+    "parameters": {
+      "block_reward": 6.827998355054005,
+      "initial_supply": 3293501.289216649,
+      "market_depth": 8619634.611894673,
+      "initial_price": 7.968432448154464,
+      "difficulty_adjustment_blocks": 1607.2019159065435,
+      "target_block_time": 308.5077340234421
+    },
+    "objective_value": -0.5007131506511253,
+    "detailed_results": {
+      "price_volatility": 2.353003164267559,
+      "network_security_score": 0.0,
+      "market_liquidity": 0.4,
+      "energy_efficiency": 0.2,
+      "final_price": 1.2541007423841248
+    }
+  },
+  "pos": {
+    "parameters": {
+      "block_reward": 2.8666299822766295,
+      "initial_supply": 1186183.796696166,
+      "market_depth": 9368338.514996387,
+      "initial_price": 5.447404810154886,
+      "min_stake": 348.57227249300115,
+      "staking_apy": 0.12939581716006718
+    },
+    "objective_value": -0.3624679282204251,
+    "detailed_results": {
+      "price_volatility": 2.573424821737826,
+      "network_security_score": 0.0,
+      "market_liquidity": 0.4,
+      "energy_efficiency": 0.8,
+      "final_price": 1.6990171045721618
+    }
+  },
+  "dpos": {
+    "parameters": {
+      "block_reward": 2.6958882547654492,
+      "initial_supply": 8056768.105519967,
+      "market_depth": 8406077.73651902,
+      "initial_price": 4.959952357490579,
+      "num_delegates": 38.61816556334255,
+      "min_stake": 59.30944098838339,
+      "staking_apy": 0.13046703793145575
+    },
+    "objective_value": -0.3801327262635549,
+    "detailed_results": {
+      "price_volatility": 2.502848938453105,
+      "network_security_score": 0.0,
+      "market_liquidity": 0.4,
+      "energy_efficiency": 0.8,
+      "final_price": 0.2794000966630372
+    }
+  }
+}
