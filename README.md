@@ -62,6 +62,15 @@ For historical data simulation:
 python historical_simulation.py
 ```
 
+## Generated Files
+
+The simulation generates several output files in the `results/` directory:
+- HTML visualizations of metrics and analysis
+- CSV files with detailed simulation data
+- Summary statistics and reports
+
+These files are not tracked in Git as they are generated during simulation runs. Each time you run the simulation, new files will be created in the `results/` directory.
+
 ## Components
 
 ### Consensus Mechanisms
