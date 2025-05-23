@@ -22,6 +22,7 @@ wheels/
 
 # Virtual Environment
 venv/
+venv_new/
 ENV/
 
 # IDE
@@ -49,3 +50,27 @@ tensorboard_logs/
 
 # Jupyter Notebook
 .ipynb_checkpoints 
+
+# Generated files
+results/
+simulation_results/
+test_results/
+*.html
+!docs/*.html
+
+# Documentation
+IMPLEMENTATION_PLAN.md
+SUMMARY.md
+PROGRESS_LOG.md
+TESTING_ROADMAP.md
+optimization_plan.md
+
+# Additional directories
+models/
+scenarios/
+simulation_results/
+token_sim.egg-info/
+token_market/
+
+# Configuration
+config.py 

@@ -1,156 +1,186 @@
 import random
-from typing import Dict, Any
-from token_sim.agents import Agent
-from token_sim.agents.trader import Trader
-from token_sim.agents.holder import Holder
+import numpy as np
+from Base_Agent import TokenAgent
 
-class MarketMaker:
-    """Provides liquidity and price quotes in the market."""
-    
-    def __init__(self, 
-                 unique_id: str,
-                 model: Any,
-                 liquidity_fiat: float = 50000.0,
-                 liquidity_tokens: float = 50000.0,
-                 fee_rate: float = 0.01,
-                 price_volatility: float = 0.05):
-        self.unique_id = unique_id
-        self.model = model
+# @title Market Maker
+class MarketMaker(TokenAgent):
+    """Provides liquidity and price quotes in the market with improved order book management"""
+
+    def __init__(self, unique_id, model,
+                 liquidity_fiat=50000.0,
+                 liquidity_tokens=50000.0,
+                 fee_rate=0.01,
+                 price_volatility=0.05,
+                 max_slippage=0.02,
+                 order_book_depth=10):
+        super().__init__(unique_id, model)
+        self.agent_type = "market_maker"
         self.liquidity_fiat = liquidity_fiat
         self.liquidity_tokens = liquidity_tokens
         self.fee_rate = fee_rate
         self.price_volatility = price_volatility
-        self.initial_liquidity_fiat = liquidity_fiat
-        self.initial_liquidity_tokens = liquidity_tokens
-        self.initial_price = self.provide_price_quote()
-        self.trade_history = []
-        self.current_volume = 0.0
-    
-    def provide_price_quote(self) -> float:
-        """Provide a dynamic token price quote based on liquidity."""
+        self.max_slippage = max_slippage
+        self.order_book_depth = order_book_depth
+        self.order_book = {
+            'bids': [],  # List of (price, size) tuples
+            'asks': []   # List of (price, size) tuples
+        }
+        self.initialize_order_book()
+
+    def initialize_order_book(self):
+        """Initialize the order book with spread orders"""
+        base_price = self.liquidity_fiat / self.liquidity_tokens
+        spread = base_price * self.price_volatility
+        
+        # Initialize bids (buy orders)
+        for i in range(self.order_book_depth):
+            price = base_price * (1 - spread * (i + 1) / self.order_book_depth)
+            size = self.liquidity_tokens / (self.order_book_depth * 2)
+            self.order_book['bids'].append((price, size))
+        
+        # Initialize asks (sell orders)
+        for i in range(self.order_book_depth):
+            price = base_price * (1 + spread * (i + 1) / self.order_book_depth)
+            size = self.liquidity_tokens / (self.order_book_depth * 2)
+            self.order_book['asks'].append((price, size))
+
+    def calculate_slippage(self, amount, order_type):
+        """Calculate price slippage based on order size and order book depth"""
+        total_volume = sum(size for _, size in self.order_book['bids' if order_type == 'sell' else 'asks'])
+        if total_volume == 0:
+            return self.max_slippage
+        
+        # Calculate slippage based on order size relative to available liquidity
+        slippage = min(self.max_slippage, (amount / total_volume) * self.max_slippage)
+        return slippage
+
+    def provide_price_quote(self, amount=None, order_type=None):
+        """Provide a dynamic token price quote based on liquidity and order book depth"""
         fiat = self.liquidity_fiat
         tokens = self.liquidity_tokens
-        
+
         if tokens <= 0 or fiat <= 0:
-            return max(self.model.price_discovery.current_price * (1 + random.uniform(-0.1, 0.1)), 0.001)
-        
+            return max(self.model.token_price * (1 + random.uniform(-0.1, 0.1)), 0.001)
+
         base_price = fiat / tokens
-        
+
         # Apply volatility
         volatility_factor = random.uniform(-self.price_volatility, self.price_volatility)
         adjusted_price = base_price * (1 + volatility_factor)
-        
+
+        # Calculate slippage if amount and order type are provided
+        if amount and order_type:
+            slippage = self.calculate_slippage(amount, order_type)
+            if order_type == 'buy':
+                adjusted_price *= (1 + slippage)
+            else:
+                adjusted_price *= (1 - slippage)
+
         # Clamp price within bounds
-        min_price = self.model.price_discovery.current_price * 0.5
-        max_price = self.model.price_discovery.current_price * 2.0
+        min_price = self.model.token_price * 0.5
+        max_price = self.model.token_price * 2.0
         final_price = max(min(adjusted_price, max_price), min_price)
-        
+
         return round(final_price, 4)
-    
-    def _calculate_price_impact(self, amount: float, trade_type: str) -> float:
-        """Calculate the price impact of a trade."""
-        # Base impact is proportional to trade size relative to liquidity
-        base_impact = amount / self.liquidity_tokens if trade_type == 'buy' else amount / self.liquidity_fiat
-        
-        # Add volatility factor
-        volatility_factor = self.price_volatility * (1 + self.current_volume / self.liquidity_fiat)
-        
-        # Calculate final impact
-        impact = base_impact * volatility_factor
-        
-        # Cap the impact
-        return min(impact, 0.1)  # Maximum 10% price impact
 
-    def execute_trade(self, agent: Agent, trade_type: str, amount: float) -> Dict[str, Any]:
-        """Execute a trade with the market maker."""
-        if trade_type == 'buy':
-            # Calculate price impact
-            price_impact = self._calculate_price_impact(amount, 'buy')
-            execution_price = self.initial_price * (1 + price_impact)
-            
-            # Calculate total cost
-            total_cost = amount * execution_price
-            
-            # Check if agent has enough balance
-            if agent.state['fiat_balance'] < total_cost:
-                return None
-            
-            # Execute trade
-            agent.state['fiat_balance'] -= total_cost
-            agent.state['token_balance'] += amount
-            
-            # Update market maker state
-            self.liquidity_fiat += total_cost
-            self.liquidity_tokens -= amount
-            
-            # Calculate profit/return
-            profit = 0.0
-            if isinstance(agent, Trader):
-                # For traders, profit is based on price movement
-                profit = -price_impact * amount * self.initial_price
-            
-            return {
-                'type': 'buy',
-                'amount': amount,
-                'price': execution_price,
-                'volume': total_cost,
-                'profit': profit
-            }
-            
-        elif trade_type == 'sell':
-            # Calculate price impact
-            price_impact = self._calculate_price_impact(amount, 'sell')
-            execution_price = self.initial_price * (1 - price_impact)
-            
-            # Calculate total value
-            total_value = amount * execution_price
-            
-            # Check if agent has enough tokens
-            if agent.state['token_balance'] < amount:
-                return None
-            
-            # Execute trade
-            agent.state['token_balance'] -= amount
-            agent.state['fiat_balance'] += total_value
-            
-            # Update market maker state
-            self.liquidity_fiat -= total_value
-            self.liquidity_tokens += amount
-            
-            # Calculate profit/return
-            profit = 0.0
-            return_value = 0.0
-            
-            if isinstance(agent, Trader):
-                # For traders, profit is based on price movement
-                profit = price_impact * amount * self.initial_price
-            elif isinstance(agent, Holder):
-                # For holders, return is based on holding period
-                holding_period = self.model.current_step - agent.state.get('last_trade_step', 0)
-                return_value = (execution_price - agent.state.get('last_trade_price', execution_price)) * amount
-                return_value *= (1 + 0.01 * holding_period)  # Add small bonus for holding
-            
-            return {
-                'type': 'sell',
-                'amount': amount,
-                'price': execution_price,
-                'volume': total_value,
-                'profit': profit,
-                'return': return_value
-            }
+    def execute_trade(self, agent, trade_type, amount):
+        """Executes a token buy/sell with improved price impact handling"""
+        # Calculate effective price with slippage
+        effective_price = self.provide_price_quote(amount, trade_type)
         
-        return None
+        if trade_type == "buy":
+            tokens_bought = amount / effective_price
+            if self.liquidity_tokens >= tokens_bought:
+                # Update order book
+                self.update_order_book('asks', effective_price, tokens_bought)
+                
+                self.liquidity_tokens -= tokens_bought
+                self.liquidity_fiat += amount * (1 - self.fee_rate)
 
-    def reset(self):
-        """Reset market maker state."""
-        self.liquidity_fiat = self.initial_liquidity_fiat
-        self.liquidity_tokens = self.initial_liquidity_tokens
-        self.current_price = self.initial_price
-        self.trade_history = []
-        self.current_volume = 0.0
+                agent.tokens += tokens_bought
+                agent.fiat_balance -= amount
+                self.model.record_transaction("buy", amount, tokens_bought, agent.unique_id)
+                return True
 
-    def get_parameter(self, parameter_name: str) -> Any:
-        """Get a parameter value from the market maker."""
-        if hasattr(self, parameter_name):
-            return getattr(self, parameter_name)
-        raise ValueError(f"Unknown parameter: {parameter_name}") 
+        elif trade_type == "sell":
+            fiat_returned = amount * effective_price
+            if self.liquidity_fiat >= fiat_returned:
+                # Update order book
+                self.update_order_book('bids', effective_price, amount)
+                
+                self.liquidity_tokens += amount
+                self.liquidity_fiat -= fiat_returned * (1 + self.fee_rate)
+
+                agent.tokens -= amount
+                agent.fiat_balance += fiat_returned
+                self.model.record_transaction("sell", fiat_returned, amount, agent.unique_id)
+                return True
+        
+        return False
+
+    def update_order_book(self, side, price, size):
+        """Update the order book after a trade"""
+        orders = self.order_book[side]
+        remaining_size = size
+        
+        # Match orders starting from the best price
+        while remaining_size > 0 and orders:
+            order_price, order_size = orders[0]
+            if (side == 'bids' and price <= order_price) or (side == 'asks' and price >= order_price):
+                matched_size = min(remaining_size, order_size)
+                orders[0] = (order_price, order_size - matched_size)
+                remaining_size -= matched_size
+                
+                # Remove empty orders
+                if orders[0][1] <= 0:
+                    orders.pop(0)
+            else:
+                break
+        
+        # Add remaining size as a new order
+        if remaining_size > 0:
+            orders.append((price, remaining_size))
+            orders.sort(key=lambda x: x[0], reverse=(side == 'bids'))
+
+    def step(self):
+        """Update order book and adjust prices based on market conditions"""
+        # Rebalance order book based on current price
+        self.rebalance_order_book()
+        
+        # Adjust prices based on market conditions
+        self.adjust_prices()
+
+    def rebalance_order_book(self):
+        """Rebalance the order book to maintain desired depth and spread"""
+        base_price = self.liquidity_fiat / self.liquidity_tokens
+        spread = base_price * self.price_volatility
+        
+        # Rebalance bids
+        self.order_book['bids'] = []
+        for i in range(self.order_book_depth):
+            price = base_price * (1 - spread * (i + 1) / self.order_book_depth)
+            size = self.liquidity_tokens / (self.order_book_depth * 2)
+            self.order_book['bids'].append((price, size))
+        
+        # Rebalance asks
+        self.order_book['asks'] = []
+        for i in range(self.order_book_depth):
+            price = base_price * (1 + spread * (i + 1) / self.order_book_depth)
+            size = self.liquidity_tokens / (self.order_book_depth * 2)
+            self.order_book['asks'].append((price, size))
+
+    def adjust_prices(self):
+        """Adjust prices based on market conditions and inventory"""
+        # Calculate inventory imbalance
+        inventory_ratio = self.liquidity_tokens / (self.liquidity_tokens + self.liquidity_fiat / self.model.token_price)
+        
+        # Adjust spread based on inventory imbalance
+        if inventory_ratio > 0.6:  # Too many tokens
+            self.price_volatility *= 1.1  # Increase spread to encourage selling
+        elif inventory_ratio < 0.4:  # Too many fiat
+            self.price_volatility *= 1.1  # Increase spread to encourage buying
+        else:
+            self.price_volatility *= 0.95  # Gradually decrease spread
+        
+        # Clamp volatility
+        self.price_volatility = max(0.01, min(0.1, self.price_volatility))
