@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# Add the project root to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from config import ALPHA_VANTAGE_API_KEY
+# Get API key from environment variable
+ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
+if not ALPHA_VANTAGE_API_KEY:
+    raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is not set. Please set it before running the simulation.")
 
 class HistoricalDataLoader:
     """Loads and processes historical cryptocurrency data."""

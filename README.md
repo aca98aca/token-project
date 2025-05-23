@@ -43,6 +43,20 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+3. Set up Alpha Vantage API key:
+```bash
+# On macOS/Linux
+export ALPHA_VANTAGE_API_KEY="your_api_key_here"
+
+# On Windows (Command Prompt)
+set ALPHA_VANTAGE_API_KEY=your_api_key_here
+
+# On Windows (PowerShell)
+$env:ALPHA_VANTAGE_API_KEY="your_api_key_here"
+```
+
+You can get a free API key from [Alpha Vantage](https://www.alphavantage.co/support/#api-key).
+
 Note: TA-Lib installation might require additional steps:
 - On macOS: `brew install ta-lib`
 - On Linux: `sudo apt-get install ta-lib`
