@@ -1,4 +1,4 @@
-from token_market_simulator import run_market_simulation, plot_simulation_results, plot_trading_signals, plot_performance_metrics
+from token_sim.simulation.token_market_simulator import run_market_simulation, plot_simulation_results, plot_trading_signals, plot_performance_metrics
 import os
 
 def test_balanced_scenario():

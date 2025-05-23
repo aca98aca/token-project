@@ -1,4 +1,4 @@
-from token_sim.simulation import TokenSimulation
+from token_sim.simulation.simulation_controller import TokenSimulation
 from token_sim.consensus.pow import ProofOfWork
 from token_sim.consensus.pos import ProofOfStake
 from token_sim.consensus.dpos import DelegatedProofOfStake

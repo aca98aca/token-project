@@ -1,5 +1,5 @@
 from token_sim.data.historical_loader import HistoricalDataLoader
-from token_market_simulator import run_market_simulation, plot_scenario_comparison
+from token_sim.simulation.token_market_simulator import run_market_simulation, plot_scenario_comparison
 import pandas as pd
 from typing import Dict, Any, List
 import matplotlib.pyplot as plt
