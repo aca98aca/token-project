@@ -1,4 +1,0 @@
-Scenario,Final Price,Average Volume,Max Price,Min Price,Price Volatility,Total Miner Rewards,Avg Active Miners,Avg Network Hashrate
-PoW,$1.32,$40694.21,$1.96,$0.37,29.27%,$51000.00,0.1,5014.5
-PoS,$1.05,$52847.98,$2.15,$0.17,43.78%,$199000.00,100.0,646823.0
-DPoS,$0.06,$58688.20,$2.97,$0.00,81.48%,$49900.00,100.0,60172.5
