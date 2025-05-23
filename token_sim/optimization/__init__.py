@@ -7,4 +7,6 @@ optimal parameter configurations for token economic systems.
 
 from token_sim.optimization.algorithms import BayesianOptimizer
 
-__all__ = ['BayesianOptimizer'] 
+__all__ = ['BayesianOptimizer']
+
+"""Performance optimization module.""" 

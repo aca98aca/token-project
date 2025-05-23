@@ -315,37 +315,46 @@ class TestSimulationIntegration:
                  if isinstance(agent, Miner)]
         assert all(miner.is_operational() for miner in miners)
 
-    @pytest.mark.xfail(reason="Consensus recovery implementation needs further work")
     def test_consensus_failure_recovery(self, simulation_model):
-        """Test system recovery from consensus failure"""
-        # Simulate consensus failure
+        """Test that the consensus mechanism can recover from failures."""
+        # Force a consensus failure
         simulation_model.consensus.force_failure()
         
-        # Run simulation for more steps to allow recovery
-        for _ in range(5):  # Increased from 3 to 5
+        # Verify consensus is unhealthy
+        assert not simulation_model.consensus.is_healthy()
+        
+        # Track recovery progress
+        recovery_states = []
+        for _ in range(5):  # Run for 5 steps to ensure recovery completes
             simulation_model.step()
+            recovery_states.append({
+                'active_miners': len(simulation_model.consensus.get_active_participants()),
+                'difficulty': simulation_model.consensus.current_difficulty,
+                'block_reward': simulation_model.consensus.block_reward,
+                'is_healthy': simulation_model.consensus.is_healthy()
+            })
         
-        # Force recovery for testing purposes
-        simulation_model.consensus.current_difficulty = 1.0
-        simulation_model.consensus.block_reward = 1.0
+        # Verify recovery progression
+        assert recovery_states[0]['active_miners'] == 0  # All miners inactive initially
+        assert recovery_states[0]['difficulty'] == float('inf')  # Infinite difficulty
+        assert recovery_states[0]['block_reward'] == 0.0  # No rewards
         
-        # Re-enable participants
-        for participant_id, stats in simulation_model.consensus.participants.items():
-            stats['active'] = True
-            
-        # Force total_hashrate to be above threshold
-        simulation_model.consensus.total_hashrate = simulation_model.consensus.target_hashrate * 0.2
+        # Check gradual recovery
+        active_miners = [state['active_miners'] for state in recovery_states]
+        assert all(active_miners[i] <= active_miners[i+1] for i in range(len(active_miners)-1))  # Monotonically increasing
         
-        # Verify recovery
+        # Verify final state
+        final_state = recovery_states[-1]
+        assert final_state['is_healthy']  # Consensus should be healthy
+        assert final_state['active_miners'] > 0  # Should have active miners
+        assert final_state['difficulty'] < float('inf')  # Finite difficulty
+        assert final_state['block_reward'] > 0.0  # Positive block reward
+        
+        # Verify consensus is fully operational
         assert simulation_model.consensus.is_healthy()
-        assert simulation_model.market.is_operational()
-        
-        # Run a few more steps
-        for _ in range(2):
-            simulation_model.step()
-        
-        # Check that transactions are being processed
-        assert len(simulation_model.market.trade_history) > 0
+        assert len(simulation_model.consensus.get_active_participants()) > 0
+        assert simulation_model.consensus.current_difficulty > 0
+        assert simulation_model.consensus.block_reward > 0
 
     def test_cross_component_state_consistency(self, simulation_model):
         """Test that all components maintain consistent state"""

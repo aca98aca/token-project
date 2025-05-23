@@ -1,145 +1,167 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import random
+import numpy as np
 from . import Agent
 
 class Miner(Agent):
-    """Miner agent that participates in the consensus mechanism."""
+    """Miner agent that participates in the consensus mechanism with improved strategies."""
     
     def __init__(self, 
                  agent_id: str,
-                 strategy: str = 'passive',
-                 initial_hashrate: float = 50.0,
-                 electricity_cost: float = 0.1,
-                 initial_balance: float = 1000.0):  # Increased initial balance
-        self.agent_id = agent_id
-        self.id = agent_id  # Alias for backward compatibility
-        self.strategy = strategy
-        self.initial_hashrate = initial_hashrate
-        self.electricity_cost = electricity_cost
-        self.initial_balance = initial_balance
-        self.state = {
-            'active': True,
-            'hashrate': initial_hashrate,
+                 strategy: str = 'profit_maximizer',
+                 initial_balance: float = 10000.0,
+                 initial_tokens: float = 0.0,
+                 initial_hashrate: float = 1000.0,
+                 electricity_cost: float = 0.1,  # Cost per unit of hashrate
+                 efficiency: float = 0.8):  # Mining efficiency
+        super().__init__(agent_id, strategy)
+        self.maintenance_cost = electricity_cost
+        self.efficiency = efficiency
+        self.state.update({
             'balance': initial_balance,
-            'token_balance': 0.0,
-            'total_profit': 0.0,
+            'token_balance': initial_tokens,
             'initial_balance': initial_balance,
-            'electricity_cost': electricity_cost,
+            'hashrate': initial_hashrate,
+            'base_hashrate': initial_hashrate,  # Store initial hashrate
+            'maintenance_cost': electricity_cost * initial_hashrate,
+            'efficiency': efficiency,
+            'active': True,
+            'rewards': 0.0,
+            'costs': 0.0,
+            'profit': 0.0,
+            'last_adjustment': 0,
+            'adjustment_cooldown': 10,  # Minimum steps between adjustments
+            'participate': True,
+            'hashrate_adjustment': 0.0
+        })
+    
+    def initialize(self, initial_balance: float = 1000.0) -> None:
+        """Initialize the miner with initial balance."""
+        super().initialize(initial_balance)
+        self.state.update({
+            'hashrate': self.state['base_hashrate'],
             'blocks_mined': 0,
             'total_rewards': 0.0,
             'total_costs': 0.0,
             'blocks_found': 0,
-            'network_hashrate': 0.0
-        }
-    
-    def initialize(self, initial_balance: float = 1000.0) -> None:
-        """Initialize the miner with initial balance."""
-        self.state['balance'] = initial_balance
-        self.state['active'] = True
-        self.state['hashrate'] = self.initial_hashrate
+            'network_hashrate': 0.0,
+            'profitability_history': [],
+            'hardware_status': 'active',
+            'last_maintenance': 0,
+            'maintenance_interval': 100
+        })
     
     def act(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Decide on mining actions based on current state and strategy."""
-        actions = {
-            'participate': True,
-            'hashrate_adjustment': 0.0
-        }
+        """Decide mining actions based on strategy."""
+        actions = {'adjust_hashrate': False, 'amount': 0.0}
         
-        # Get current state
-        token_price = state.get('token_price', 1.0)
-        network_difficulty = state.get('network_difficulty', 1.0)
-        block_reward = state.get('block_reward', 1.0)
-        network_hashrate = state.get('network_hashrate', self.initial_hashrate * 25)  # Default to 25 miners
-        
-        # Update network hashrate in state
-        self.state['network_hashrate'] = network_hashrate
-        
+        if not self.state['active']:
+            return actions
+            
+        current_price = state.get('price', 0.0)
+        if current_price == 0:
+            return actions
+            
         # Calculate mining profitability
-        # Probability of finding a block = miner_hashrate / total_hashrate
-        block_probability = self.state['hashrate'] / (network_hashrate + 1e-6)  # Avoid division by zero
+        block_reward = state.get('block_reward', 0.0)
+        network_hashrate = state.get('network_hashrate', 1.0)
+        network_share = self.state['hashrate'] / network_hashrate
         
-        # Expected revenue per block
-        expected_revenue = block_probability * block_reward * token_price
+        # Calculate expected rewards and costs
+        expected_reward = block_reward * network_share * current_price
+        maintenance_cost = self.state['maintenance_cost'] * self.state['efficiency']
         
-        # Calculate costs per block (assuming 10 minute blocks)
-        costs_per_block = (self.state['hashrate'] * self.electricity_cost) / 6  # 6 blocks per hour
+        # Strategy-specific actions
+        if self.strategy == 'profit_maximizer':
+            # Adjust hashrate based on profitability
+            if self.state['last_adjustment'] >= self.state['adjustment_cooldown']:
+                if expected_reward > maintenance_cost * 1.2:  # 20% profit margin
+                    # Increase hashrate
+                    actions['adjust_hashrate'] = True
+                    actions['amount'] = self.state['base_hashrate'] * 0.1  # 10% increase
+                elif expected_reward < maintenance_cost * 0.8:  # 20% loss margin
+                    # Decrease hashrate
+                    actions['adjust_hashrate'] = True
+                    actions['amount'] = -self.state['base_hashrate'] * 0.1  # 10% decrease
+                
+                if actions['adjust_hashrate']:
+                    self.state['last_adjustment'] = 0
         
-        # Strategy-based decisions
-        if self.strategy == 'aggressive':
-            if expected_revenue > costs_per_block * 1.2:  # 20% profit margin
-                actions['hashrate_adjustment'] = self.initial_hashrate * 0.5  # Increase by 50%
-            elif expected_revenue < costs_per_block * 0.8:  # 20% loss threshold
-                actions['participate'] = False
-                actions['hashrate_adjustment'] = -self.state['hashrate'] * 0.2  # Reduce by 20%
+        elif self.strategy == 'network_builder':
+            # Focus on network growth
+            if self.state['last_adjustment'] >= self.state['adjustment_cooldown']:
+                if network_share < 0.1:  # Target 10% network share
+                    actions['adjust_hashrate'] = True
+                    actions['amount'] = self.state['base_hashrate'] * 0.2  # 20% increase
+                elif network_share > 0.15:  # Cap at 15% network share
+                    actions['adjust_hashrate'] = True
+                    actions['amount'] = -self.state['base_hashrate'] * 0.1  # 10% decrease
+                
+                if actions['adjust_hashrate']:
+                    self.state['last_adjustment'] = 0
         
-        elif self.strategy == 'passive':
-            if expected_revenue > costs_per_block * 1.1:  # 10% profit margin
-                actions['hashrate_adjustment'] = self.initial_hashrate * 0.2  # Increase by 20%
-            elif expected_revenue < costs_per_block * 0.9:  # 10% loss threshold
-                actions['participate'] = False
-                actions['hashrate_adjustment'] = -self.state['hashrate'] * 0.1  # Reduce by 10%
-        
-        elif self.strategy == 'opportunistic':
-            if expected_revenue > costs_per_block * 1.5:  # 50% profit margin
-                actions['hashrate_adjustment'] = self.initial_hashrate * 0.8  # Increase by 80%
-            elif expected_revenue < costs_per_block * 0.95:  # 5% loss threshold
-                actions['participate'] = False
-                actions['hashrate_adjustment'] = -self.state['hashrate'] * 0.3  # Reduce by 30%
-        
-        # Ensure hashrate doesn't go below 10% of initial
-        if self.state['hashrate'] + actions['hashrate_adjustment'] < self.initial_hashrate * 0.1:
-            actions['hashrate_adjustment'] = self.initial_hashrate * 0.1 - self.state['hashrate']
-        
+        self.state['last_adjustment'] += 1
         return actions
     
-    def update(self, reward: float, new_state: Dict[str, Any]) -> None:
-        """Update miner's state based on rewards and new state."""
+    def update(self, reward: float, state: Dict[str, Any]) -> None:
+        """Update miner state based on rewards and state."""
         # Update token balance with block reward
         self.state['token_balance'] += reward
         
         # Convert tokens to fiat at current price
-        token_price = new_state.get('token_price', 1.0)
+        token_price = state.get('price', 1.0)
         fiat_reward = reward * token_price
         self.state['balance'] += fiat_reward
-        self.state['total_rewards'] += fiat_reward
+        self.state['rewards'] += fiat_reward
         
         # Update hashrate if there was an adjustment
-        if 'hashrate_adjustment' in new_state:
-            self.state['hashrate'] = max(0.0, self.state['hashrate'] + new_state['hashrate_adjustment'])
+        if state.get('hashrate_adjustment'):
+            self.state['hashrate'] = max(0.0, self.state['hashrate'] + state['hashrate_adjustment'])
         
-        # Update costs (per block)
-        costs = (self.state['hashrate'] * self.electricity_cost) / 6  # 6 blocks per hour
-        self.state['total_costs'] += costs
-        self.state['balance'] -= costs
+        # Update costs
+        electricity_cost = (self.state['hashrate'] * self.state['maintenance_cost']) / 6  # 6 blocks per hour
+        self.state['costs'] += electricity_cost
+        self.state['balance'] -= electricity_cost
         
         # Update blocks found
         if reward > 0:
-            self.state['blocks_found'] += 1
+            self.state['blocks_found'] = self.state.get('blocks_found', 0) + 1
         
         # Update network hashrate
-        if 'network_hashrate' in new_state:
-            self.state['network_hashrate'] = new_state['network_hashrate']
+        if 'network_hashrate' in state:
+            self.state['network_hashrate'] = state['network_hashrate']
+        
+        # Update efficiency if maintenance was performed
+        if state.get('maintenance', False):
+            self.state['efficiency'] = min(1.0, self.state['efficiency'] + 0.1)
+        
+        # Update profit
+        self.state['profit'] = self.state['rewards'] - self.state['costs']
+        
+        # Check if miner should become inactive
+        if self.state['balance'] < self.state['maintenance_cost'] * 10:  # Can't afford 10 steps of maintenance
+            self.state['active'] = False
+            self.state['hashrate'] = 0
     
     def get_state(self) -> Dict[str, Any]:
         """Get current state of the miner."""
         return self.state.copy()
-
-    def reset(self):
+    
+    def reset(self) -> None:
         """Reset agent state."""
-        self.state = {
-            'active': True,
-            'hashrate': self.initial_hashrate,
-            'balance': self.initial_balance,
-            'token_balance': 0.0,
-            'total_profit': 0.0,
-            'initial_balance': self.initial_balance,
-            'electricity_cost': self.electricity_cost,
+        super().reset()
+        self.state.update({
+            'hashrate': self.state['base_hashrate'],
             'blocks_mined': 0,
             'total_rewards': 0.0,
             'total_costs': 0.0,
             'blocks_found': 0,
-            'network_hashrate': 0.0
-        } 
+            'network_hashrate': 0.0,
+            'profitability_history': [],
+            'hardware_status': 'active',
+            'last_maintenance': 0,
+            'maintenance_interval': 100
+        })
 
     def is_operational(self) -> bool:
         """Check if miner is operational."""

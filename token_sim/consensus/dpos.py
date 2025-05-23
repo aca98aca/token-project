@@ -17,6 +17,7 @@ class DelegatedProofOfStake(ConsensusMechanism):
         self.participants: Dict[str, Dict] = {}
         self.delegates: List[str] = []
         self.total_stake = 0.0
+        self.current_block = 0  # Add block counter
         
     def initialize_participants(self, num_participants: int, initial_stake: float = 1000.0) -> None:
         """Initialize validators and delegators."""
@@ -57,6 +58,7 @@ class DelegatedProofOfStake(ConsensusMechanism):
                 total_rewards += reward
                 self.participants[delegate_id]['rewards'] += reward
                 self.participants[delegate_id]['blocks_produced'] += 1
+                self.current_block += 1  # Increment block counter
         
         # Calculate and distribute staking rewards
         for participant_id, stats in self.participants.items():
@@ -120,3 +122,8 @@ class DelegatedProofOfStake(ConsensusMechanism):
         self.delegates = [p[0] for p in sorted_participants[:self.num_delegates]]
         for delegate_id in self.delegates:
             self.participants[delegate_id]['is_delegate'] = True 
+    
+    @property
+    def current_height(self) -> int:
+        """Get current block height."""
+        return self.current_block 

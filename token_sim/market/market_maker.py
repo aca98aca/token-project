@@ -1,6 +1,8 @@
 import random
 from typing import Dict, Any
 from token_sim.agents import Agent
+from token_sim.agents.trader import Trader
+from token_sim.agents.holder import Holder
 
 class MarketMaker:
     """Provides liquidity and price quotes in the market."""
@@ -45,61 +47,99 @@ class MarketMaker:
         
         return round(final_price, 4)
     
+    def _calculate_price_impact(self, amount: float, trade_type: str) -> float:
+        """Calculate the price impact of a trade."""
+        # Base impact is proportional to trade size relative to liquidity
+        base_impact = amount / self.liquidity_tokens if trade_type == 'buy' else amount / self.liquidity_fiat
+        
+        # Add volatility factor
+        volatility_factor = self.price_volatility * (1 + self.current_volume / self.liquidity_fiat)
+        
+        # Calculate final impact
+        impact = base_impact * volatility_factor
+        
+        # Cap the impact
+        return min(impact, 0.1)  # Maximum 10% price impact
+
     def execute_trade(self, agent: Agent, trade_type: str, amount: float) -> Dict[str, Any]:
-        """Execute a token buy/sell at the current price."""
-        price = self.provide_price_quote()
-        
-        # Safety checks
-        if price <= 0 or amount <= 0:
-            return None
-        
-        trade_result = {
-            'type': trade_type,
-            'price': price,
-            'amount': amount,
-            'volume': 0.0,
-            'success': False,
-            'timestamp': self.model.current_step
-        }
-        
-        if trade_type == "buy":
-            tokens_bought = amount / price
-            if self.liquidity_tokens >= tokens_bought and agent.state['balance'] >= amount:
-                self.liquidity_tokens -= tokens_bought
-                self.liquidity_fiat += amount * (1 - self.fee_rate)
-                
-                agent.state['token_balance'] += tokens_bought
-                agent.state['balance'] -= amount
-                
-                trade_result['volume'] = amount
-                trade_result['success'] = True
-                trade_result['tokens_bought'] = tokens_bought
-                self.current_volume += amount
-        
-        elif trade_type == "sell":
-            fiat_returned = amount * price
-            if self.liquidity_fiat >= fiat_returned and agent.state['token_balance'] >= amount:
-                self.liquidity_tokens += amount
-                self.liquidity_fiat -= fiat_returned * (1 + self.fee_rate)
-                
-                agent.state['token_balance'] -= amount
-                agent.state['balance'] += fiat_returned
-                
-                trade_result['volume'] = fiat_returned
-                trade_result['success'] = True
-                trade_result['fiat_returned'] = fiat_returned
-                self.current_volume += fiat_returned
-        
-        if trade_result['success']:
-            self.trade_history.append(trade_result)
-            # Update price discovery
-            self.model.price_discovery.update_price(
-                volume=trade_result['volume'],
-                market_sentiment=0.0,  # TODO: Implement market sentiment
-                time_step=self.model.current_step
-            )
+        """Execute a trade with the market maker."""
+        if trade_type == 'buy':
+            # Calculate price impact
+            price_impact = self._calculate_price_impact(amount, 'buy')
+            execution_price = self.initial_price * (1 + price_impact)
             
-        return trade_result if trade_result['success'] else None
+            # Calculate total cost
+            total_cost = amount * execution_price
+            
+            # Check if agent has enough balance
+            if agent.state['fiat_balance'] < total_cost:
+                return None
+            
+            # Execute trade
+            agent.state['fiat_balance'] -= total_cost
+            agent.state['token_balance'] += amount
+            
+            # Update market maker state
+            self.liquidity_fiat += total_cost
+            self.liquidity_tokens -= amount
+            
+            # Calculate profit/return
+            profit = 0.0
+            if isinstance(agent, Trader):
+                # For traders, profit is based on price movement
+                profit = -price_impact * amount * self.initial_price
+            
+            return {
+                'type': 'buy',
+                'amount': amount,
+                'price': execution_price,
+                'volume': total_cost,
+                'profit': profit
+            }
+            
+        elif trade_type == 'sell':
+            # Calculate price impact
+            price_impact = self._calculate_price_impact(amount, 'sell')
+            execution_price = self.initial_price * (1 - price_impact)
+            
+            # Calculate total value
+            total_value = amount * execution_price
+            
+            # Check if agent has enough tokens
+            if agent.state['token_balance'] < amount:
+                return None
+            
+            # Execute trade
+            agent.state['token_balance'] -= amount
+            agent.state['fiat_balance'] += total_value
+            
+            # Update market maker state
+            self.liquidity_fiat -= total_value
+            self.liquidity_tokens += amount
+            
+            # Calculate profit/return
+            profit = 0.0
+            return_value = 0.0
+            
+            if isinstance(agent, Trader):
+                # For traders, profit is based on price movement
+                profit = price_impact * amount * self.initial_price
+            elif isinstance(agent, Holder):
+                # For holders, return is based on holding period
+                holding_period = self.model.current_step - agent.state.get('last_trade_step', 0)
+                return_value = (execution_price - agent.state.get('last_trade_price', execution_price)) * amount
+                return_value *= (1 + 0.01 * holding_period)  # Add small bonus for holding
+            
+            return {
+                'type': 'sell',
+                'amount': amount,
+                'price': execution_price,
+                'volume': total_value,
+                'profit': profit,
+                'return': return_value
+            }
+        
+        return None
 
     def reset(self):
         """Reset market maker state."""

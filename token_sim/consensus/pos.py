@@ -14,6 +14,7 @@ class ProofOfStake(ConsensusMechanism):
         self.staking_apy = staking_apy
         self.participants: Dict[str, Dict] = {}
         self.total_stake = 0.0
+        self.current_block = 0  # Add block counter
         
     def initialize_participants(self, num_participants: int, initial_stake: float = 1000.0) -> None:
         """Initialize validators with random stake amounts."""
@@ -51,6 +52,7 @@ class ProofOfStake(ConsensusMechanism):
                 total_rewards += reward
                 stats['rewards'] += reward
                 stats['blocks_produced'] += 1
+                self.current_block += 1  # Increment block counter
             
             # Calculate and distribute staking rewards
             staking_reward = stats['stake'] * (self.staking_apy / 365)  # Daily staking reward
@@ -89,3 +91,8 @@ class ProofOfStake(ConsensusMechanism):
             
         self.total_stake = self.total_stake - stats['stake'] + new_stake
         stats['stake'] = new_stake 
+
+    @property
+    def current_height(self) -> int:
+        """Get current block height."""
+        return self.current_block 

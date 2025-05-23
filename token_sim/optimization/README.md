@@ -4,13 +4,23 @@ This module contains optimization algorithms for tokenomics simulations. These t
 
 ## Core Components
 
-### Algorithms
+### Performance Optimization
 
-- **Bayesian Optimizer**: Uses Gaussian Process Regression to efficiently search the parameter space.
-- **Genetic Algorithm**: (Coming soon) Optimize complex parameter combinations using evolutionary methods.
-- **Reinforcement Learning**: (Coming soon) Dynamic parameter adjustment based on simulation feedback.
-- **Particle Swarm Optimization**: (Coming soon) Multi-agent optimization for continuous parameter spaces.
-- **Neural Network Optimization**: (Coming soon) Deep learning-based optimization for complex parameter relationships.
+- **Parallel Processing**: Multi-threaded and multi-process execution for CPU-intensive tasks
+- **Vectorized Operations**: NumPy-based vectorization for numerical computations
+- **Caching**: Result caching for repeated function calls
+- **Batch Processing**: Efficient batch processing of large datasets
+- **Memory Management**: Automatic memory cleanup and monitoring
+- **Performance Monitoring**: Real-time performance metrics tracking
+
+### Optimization Algorithms
+
+- **Bayesian Optimizer**: Uses Gaussian Process Regression to efficiently search the parameter space
+- **Genetic Algorithm**: Optimize complex parameter combinations using evolutionary methods
+- **Hybrid Optimizer**: Combines Bayesian and Genetic approaches for robust optimization
+- **Reinforcement Learning**: (Coming soon) Dynamic parameter adjustment based on simulation feedback
+- **Particle Swarm Optimization**: (Coming soon) Multi-agent optimization for continuous parameter spaces
+- **Neural Network Optimization**: (Coming soon) Deep learning-based optimization for complex parameter relationships
 
 ### Evaluation Metrics
 
@@ -18,8 +28,27 @@ This module contains optimization algorithms for tokenomics simulations. These t
 - **Network Security**: Estimates security levels based on miner/validator participation
 - **Market Liquidity**: Evaluates trading volumes and market depth
 - **Energy Efficiency**: Assesses consensus mechanism energy requirements
+- **Performance Metrics**: Tracks execution time, memory usage, CPU usage, throughput, and latency
 
 ## Usage
+
+### Performance Optimization
+
+```python
+from token_sim.optimization import PerformanceOptimizer, OptimizationStrategy
+
+# Initialize optimizer
+optimizer = PerformanceOptimizer(max_workers=4)
+
+# Start performance monitoring
+optimizer.monitor_performance(interval=60)  # Log metrics every 60 seconds
+
+# Optimize a function
+@optimizer.optimize_function(strategy=OptimizationStrategy.PARALLEL)
+def my_function(data):
+    # Your code here
+    pass
+```
 
 ### Bayesian Optimization for Core Parameters
 
@@ -50,6 +79,6 @@ The core parameters being optimized:
 
 - Integration with multiple consensus mechanisms
 - Advanced parameter dependency handling
-- Multi-objective optimization
-- Visualization dashboard
-- Distributed optimization processing 
+- Distributed optimization across multiple machines
+- Real-time parameter adjustment based on network conditions
+- Machine learning-based optimization strategies 

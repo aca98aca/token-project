@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 import numpy as np
 
 class PriceDiscovery:
@@ -24,42 +24,11 @@ class PriceDiscovery:
         self.fee_rate = 0.001
         self._last_block_height = 0
         self._balances = {}  # Track agent balances
+        self._agent_actions = {}  # Track agent actions for price impact
+        self._market_sentiment = 0.0  # Track overall market sentiment
         
-    def update_price(self, 
-                    volume: float = 0.0,
-                    market_sentiment: float = 0.0,
-                    time_step: int = 1) -> float:
-        """Update token price based on trading volume and market conditions.
-        
-        Args:
-            volume: Trading volume in the current period
-            market_sentiment: Market sentiment factor (-1 to 1)
-            time_step: Current time step
-            
-        Returns:
-            Updated token price
-        """
-        # Update current volume
-        self.current_volume = volume
-        
-        # Calculate price impact from volume
-        volume_impact = (volume / self.market_depth) * self.price_impact_factor
-        
-        # Add random market noise (reduced when volume is high)
-        noise_factor = max(0.1, 1.0 - (volume / self.market_depth))
-        market_noise = np.random.normal(0, self.volatility * noise_factor)
-        
-        # Calculate sentiment impact (weighted by volume)
-        sentiment_weight = min(1.0, volume / self.market_depth)
-        sentiment_impact = market_sentiment * self.volatility * 0.5 * sentiment_weight
-        
-        # Calculate price change
-        price_change = volume_impact + market_noise + sentiment_impact
-        
-        # Update price with bounds to prevent extreme values
-        self.current_price *= (1 + price_change)
-        self.current_price = max(0.001, min(self.current_price, self.initial_price * 100))
-        
+    def _update_histories(self, volume: float) -> None:
+        """Update price and volume histories."""
         # Update volume history
         self.volume_history.append(volume)
         if len(self.volume_history) > 24:  # Keep last 24 periods
@@ -70,14 +39,112 @@ class PriceDiscovery:
         if len(self.price_history) > 24:  # Keep last 24 periods
             self.price_history.pop(0)
         
-        # Update liquidity based on volume
-        self.liquidity = max(self.market_depth * 0.1, self.liquidity * (1 + price_change * 0.1))
+        # Update liquidity based on volume and price change
+        self.liquidity = max(self.market_depth * 0.1, 
+                           self.liquidity * (1 + abs(volume / self.market_depth) * 0.1))
+
+    def update_price(self, 
+                    volume: float = 0.0,
+                    market_sentiment: float = 0.0,
+                    time_step: int = 1) -> float:
+        """Update token price based on trading volume and market conditions."""
+        # Update current volume
+        self.current_volume = volume
+        
+        # Calculate price impact from volume
+        volume_impact = (volume / self.market_depth) * self.price_impact_factor
+        
+        # Generate market noise with realistic patterns
+        noise_factor = max(0.1, 1.0 - (volume / self.market_depth))
+        
+        # 1. Mean reversion component (price tends to return to initial price)
+        mean_reversion = -0.1 * (self.current_price - self.initial_price) / self.initial_price
+        
+        # 2. Volatility clustering (higher volatility after large price moves)
+        if len(self.price_history) > 1:
+            last_return = (self.price_history[-1] - self.price_history[-2]) / self.price_history[-2]
+            volatility_factor = 1.0 + abs(last_return) * 2.0
+        else:
+            volatility_factor = 1.0
+            
+        # 3. Volume-based noise (more noise when volume is low)
+        volume_noise = np.random.normal(0, self.volatility * noise_factor * volatility_factor)
+        
+        # 4. Market sentiment impact (weighted by volume)
+        sentiment_weight = min(1.0, volume / self.market_depth)
+        sentiment_impact = market_sentiment * self.volatility * 0.5 * sentiment_weight
+        
+        # 5. Agent action impact
+        agent_impact = self._calculate_agent_impact()
+        
+        # Combine all components
+        price_change = (
+            volume_impact +  # Direct volume impact
+            mean_reversion +  # Price tends to return to mean
+            volume_noise +  # Random noise scaled by volume and volatility
+            sentiment_impact +  # Market sentiment
+            agent_impact  # Agent behavior impact
+        )
+        
+        # Update price with bounds to prevent extreme values
+        self.current_price *= (1 + price_change)
+        self.current_price = max(0.001, min(self.current_price, self.initial_price * 100))
+        
+        # Update histories
+        self._update_histories(volume)
         
         # Update order book
         self._update_order_book()
         
         self.last_update_time = time_step
         return self.current_price
+    
+    def _calculate_agent_impact(self) -> float:
+        """Calculate price impact from agent actions."""
+        if not self._agent_actions:
+            return 0.0
+            
+        total_impact = 0.0
+        for agent_id, actions in self._agent_actions.items():
+            # Calculate impact based on agent's trading behavior
+            if 'trade' in actions:
+                trade = actions['trade']
+                if trade['type'] == 'buy':
+                    total_impact += trade['amount'] * 0.0001  # Positive impact for buys
+                else:
+                    total_impact -= trade['amount'] * 0.0001  # Negative impact for sells
+                    
+            # Calculate impact from mining behavior
+            if 'mining' in actions:
+                mining = actions['mining']
+                if mining['participate']:
+                    total_impact += mining['hashrate'] * 0.00001  # Small positive impact from mining
+                    
+            # Calculate impact from staking behavior
+            if 'staking' in actions:
+                staking = actions['staking']
+                if staking['stake_amount'] > 0:
+                    total_impact += staking['stake_amount'] * 0.00005  # Positive impact from staking
+        
+        # Clear agent actions after processing
+        self._agent_actions = {}
+        
+        return total_impact
+    
+    def record_agent_action(self, agent_id: str, action_type: str, action_data: Dict[str, Any]) -> None:
+        """Record an agent's action for price impact calculation."""
+        if agent_id not in self._agent_actions:
+            self._agent_actions[agent_id] = {}
+        self._agent_actions[agent_id][action_type] = action_data
+    
+    def update_balances(self, agents: List) -> None:
+        """Update balances for all agents."""
+        for agent in agents:
+            self._balances[agent.agent_id] = agent.state.get('token_balance', 0.0)
+    
+    def get_balance(self, agent_id: str) -> float:
+        """Get the token balance for an agent."""
+        return self._balances.get(agent_id, 0.0)
     
     def _update_order_book(self) -> None:
         """Generate a realistic order book based on current price and liquidity."""
@@ -215,11 +282,6 @@ class PriceDiscovery:
             }
             governance.submit_proposal(emergency_proposal)
 
-    def get_balance(self, agent_id: str) -> float:
-        """Get the token balance for an agent."""
-        # If we're tracking this agent's balance, return it
-        return self._balances.get(agent_id, 0.0)
-
     @property
     def last_block_height(self) -> int:
         """Get the last processed block height."""
@@ -249,11 +311,6 @@ class PriceDiscovery:
             price_volatility < 0.5 and
             self.liquidity > 0
         )
-
-    def update_balances(self, agents: List) -> None:
-        """Update tracked balances from agent states."""
-        for agent in agents:
-            self._balances[agent.id] = agent.state['token_balance']
 
 class SimplePriceDiscovery(PriceDiscovery):
     """A simplified price discovery model for optimization."""

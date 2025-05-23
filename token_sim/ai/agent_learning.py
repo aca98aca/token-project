@@ -6,31 +6,30 @@ from typing import Dict, List, Tuple, Any
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from gym import spaces
-import gym
+import gymnasium as gym
+from gymnasium import spaces
 from token_sim.simulation import TokenSimulation
 
 class TokenEnvironment(gym.Env):
-    """Environment for training trading agents."""
+    """Custom Environment for token simulation that follows gym interface"""
     
-    def __init__(self, simulation: TokenSimulation, agent_index: int = 0):
-        super().__init__()
+    def __init__(self, simulation, agent_index: int = 0):
+        super(TokenEnvironment, self).__init__()
         self.simulation = simulation
         self.agent_index = agent_index
         
-        # Define action space (continuous)
-        # [action_type, amount] where action_type: -1 (sell) to 1 (buy)
+        # Define action and observation space
         self.action_space = spaces.Box(
-            low=np.array([-1.0, 0.0]),
+            low=np.array([-1.0, 0.0]),  # [action_type, amount]
             high=np.array([1.0, 1.0]),
             dtype=np.float32
         )
         
-        # Define observation space (continuous)
-        # [price, volume, balance, token_balance, market_depth, volatility, liquidity_ratio, trading_frequency, price_momentum, market_sentiment]
+        # Define observation space
         self.observation_space = spaces.Box(
-            low=np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-            high=np.array([np.inf, np.inf, np.inf, np.inf, np.inf, 1.0, 1.0, 1.0, 1.0, 1.0]),
+            low=-np.inf,
+            high=np.inf,
+            shape=(10,),  # [price, volume, balance, token_balance, market_depth, volatility, liquidity_ratio, trading_frequency, price_momentum, market_sentiment]
             dtype=np.float32
         )
     
@@ -69,12 +68,7 @@ class TokenEnvironment(gym.Env):
             market_sentiment
         ], dtype=np.float32)
     
-    def reset(self):
-        """Reset the environment."""
-        self.simulation.reset()
-        return self._get_observation()
-    
-    def step(self, action):
+    def step(self, action) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """Execute one step in the environment."""
         # Convert action to trade
         action_type = action[0]  # -1 to 1
@@ -95,7 +89,13 @@ class TokenEnvironment(gym.Env):
             trade_amount
         )
         
-        # Calculate reward based on state changes
+        # Update simulation
+        self.simulation._run_step()
+        
+        # Get new state
+        observation = self._get_observation()
+        
+        # Calculate reward
         current_state = self.simulation.get_current_state()
         agent_state = self.simulation.agents[self.agent_index].state
         
@@ -117,14 +117,16 @@ class TokenEnvironment(gym.Env):
         # Combine rewards
         reward = profit + risk_penalty + liquidity_reward + frequency_penalty
         
-        # Get new state
-        observation = self._get_observation()
-        done = False  # You might want to add episode termination conditions
+        # Check if episode is done
+        done = self.simulation.current_step >= self.simulation.time_steps
         
-        return observation, reward, done, {}
+        return observation, reward, done, False, {}
     
-    def render(self, mode='human'):
-        pass
+    def reset(self, seed=None) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """Reset the environment to an initial state."""
+        self.simulation.reset()
+        initial_observation = self._get_observation()
+        return initial_observation, {}
 
 class CustomPolicy(BaseFeaturesExtractor):
     """Custom policy network for the trading agent."""
